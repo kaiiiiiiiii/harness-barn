@@ -32,6 +32,16 @@ impl Harness {
     ///
     /// [`Error::NotFound`]: crate::error::Error::NotFound
     /// [`Error::UnsupportedPlatform`]: crate::error::Error::UnsupportedPlatform
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::{Harness, HarnessKind};
+    ///
+    /// let harness = Harness::locate(HarnessKind::ClaudeCode)?;
+    /// println!("Found {} at {:?}", harness.kind(), harness.config(&get_harness::Scope::Global)?);
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn locate(kind: HarnessKind) -> Result<Self> {
         let is_installed = match kind {
             HarnessKind::ClaudeCode => claude_code::is_installed(),
@@ -47,6 +57,15 @@ impl Harness {
     }
 
     /// Returns the kind of harness.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use get_harness::{Harness, HarnessKind};
+    ///
+    /// let harness = Harness::new(HarnessKind::Goose);
+    /// assert_eq!(harness.kind(), HarnessKind::Goose);
+    /// ```
     #[must_use]
     pub fn kind(&self) -> HarnessKind {
         self.kind
@@ -59,6 +78,16 @@ impl Harness {
     ///
     /// [`is_installed`]: Harness::is_installed
     /// [`installed`]: Harness::installed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use get_harness::{Harness, HarnessKind};
+    ///
+    /// // Create without checking installation
+    /// let harness = Harness::new(HarnessKind::OpenCode);
+    /// assert_eq!(harness.kind(), HarnessKind::OpenCode);
+    /// ```
     #[must_use]
     pub fn new(kind: HarnessKind) -> Self {
         Self { kind }
@@ -68,6 +97,17 @@ impl Harness {
     ///
     /// Installation is determined by checking if the harness's global
     /// configuration directory exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use get_harness::{Harness, HarnessKind};
+    ///
+    /// let harness = Harness::new(HarnessKind::Goose);
+    /// if harness.is_installed() {
+    ///     println!("Goose is available");
+    /// }
+    /// ```
     #[must_use]
     pub fn is_installed(&self) -> bool {
         match self.kind {
@@ -83,6 +123,17 @@ impl Harness {
     ///
     /// Returns an error if the home directory or config directory cannot
     /// be determined (required to check installation status).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::Harness;
+    ///
+    /// for harness in Harness::installed()? {
+    ///     println!("{} is installed", harness.kind());
+    /// }
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn installed() -> Result<Vec<Harness>> {
         let mut result = Vec::new();
         for &kind in HarnessKind::ALL {
@@ -104,6 +155,18 @@ impl Harness {
     ///
     /// - `Ok(None)` if this harness does not support skills (Goose)
     /// - `Ok(Some(resource))` if skills are supported (Claude Code, OpenCode)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::{Harness, HarnessKind, Scope};
+    ///
+    /// let harness = Harness::new(HarnessKind::ClaudeCode);
+    /// if let Some(skills) = harness.skills(&Scope::Global)? {
+    ///     println!("Skills directory: {}", skills.path.display());
+    /// }
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn skills(&self, scope: &Scope) -> Result<Option<DirectoryResource>> {
         match self.kind {
             HarnessKind::ClaudeCode => {
@@ -141,6 +204,18 @@ impl Harness {
     /// # Errors
     ///
     /// Returns an error if the configuration directory cannot be determined.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::{Harness, HarnessKind, Scope};
+    ///
+    /// let harness = Harness::new(HarnessKind::OpenCode);
+    /// if let Some(commands) = harness.commands(&Scope::Global)? {
+    ///     println!("Commands at: {}", commands.path.display());
+    /// }
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn commands(&self, scope: &Scope) -> Result<Option<DirectoryResource>> {
         let path = match self.kind {
             HarnessKind::ClaudeCode => claude_code::commands_dir(scope)?,
@@ -164,6 +239,18 @@ impl Harness {
     /// # Errors
     ///
     /// Returns an error if the configuration directory cannot be determined.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::{Harness, HarnessKind, Scope};
+    ///
+    /// let harness = Harness::new(HarnessKind::OpenCode);
+    /// if let Some(plugins) = harness.plugins(&Scope::Global)? {
+    ///     println!("Plugins at: {}", plugins.path.display());
+    /// }
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn plugins(&self, scope: &Scope) -> Result<Option<DirectoryResource>> {
         match self.kind {
             HarnessKind::OpenCode => {
@@ -188,6 +275,18 @@ impl Harness {
     /// # Errors
     ///
     /// Returns an error if the configuration directory cannot be determined.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::{Harness, HarnessKind, Scope};
+    ///
+    /// let harness = Harness::new(HarnessKind::OpenCode);
+    /// if let Some(agents) = harness.agents(&Scope::Global)? {
+    ///     println!("Agents at: {}", agents.path.display());
+    /// }
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn agents(&self, scope: &Scope) -> Result<Option<DirectoryResource>> {
         match self.kind {
             HarnessKind::OpenCode => {
@@ -210,6 +309,22 @@ impl Harness {
     /// # Errors
     ///
     /// Returns an error if the configuration directory cannot be determined.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::{Harness, HarnessKind, Scope};
+    /// use std::path::PathBuf;
+    ///
+    /// let harness = Harness::new(HarnessKind::ClaudeCode);
+    ///
+    /// // Global config
+    /// let global = harness.config(&Scope::Global)?;
+    ///
+    /// // Project config
+    /// let project = harness.config(&Scope::Project(PathBuf::from("/my/project")))?;
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn config(&self, scope: &Scope) -> Result<PathBuf> {
         match self.kind {
             HarnessKind::ClaudeCode => claude_code::config_dir(scope),
@@ -223,6 +338,19 @@ impl Harness {
     /// # Errors
     ///
     /// Returns an error if the configuration directory cannot be determined.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::{Harness, HarnessKind, Scope};
+    ///
+    /// let harness = Harness::new(HarnessKind::ClaudeCode);
+    /// if let Some(mcp) = harness.mcp(&Scope::Global)? {
+    ///     println!("MCP config: {}", mcp.file.display());
+    ///     println!("Key path: {}", mcp.key_path);
+    /// }
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn mcp(&self, scope: &Scope) -> Result<Option<ConfigResource>> {
         let (file, key_path, format) = match self.kind {
             HarnessKind::ClaudeCode => {
@@ -364,6 +492,19 @@ impl Harness {
     /// # Errors
     ///
     /// Returns an error if the configuration directory cannot be determined.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use get_harness::{Harness, HarnessKind, Scope};
+    /// use std::path::PathBuf;
+    ///
+    /// let harness = Harness::new(HarnessKind::ClaudeCode);
+    /// if let Some(rules) = harness.rules(&Scope::Project(PathBuf::from(".")))? {
+    ///     println!("Rules directory: {}", rules.path.display());
+    /// }
+    /// # Ok::<(), get_harness::Error>(())
+    /// ```
     pub fn rules(&self, scope: &Scope) -> Result<Option<DirectoryResource>> {
         let path = match self.kind {
             HarnessKind::ClaudeCode => claude_code::rules_dir(scope),
