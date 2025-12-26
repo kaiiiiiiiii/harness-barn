@@ -1,0 +1,95 @@
+# get-harness
+
+Cross-platform harness path discovery for AI coding CLI tools.
+
+## Features
+
+- Detect installed AI coding assistants (Claude Code, OpenCode, Goose)
+- Resolve configuration paths (global and project-scoped)
+- Unified MCP server configuration types
+- Cross-platform support (macOS, Linux, Windows)
+
+## Installation
+
+```toml
+[dependencies]
+get-harness = "0.1"
+```
+
+## Quick Start
+
+### Detect Installed Harnesses
+
+```rust,no_run
+use get_harness::{Harness, HarnessKind};
+
+// Check all installed harnesses
+for harness in Harness::installed()? {
+    println!("{} is installed", harness.kind());
+}
+# Ok::<(), get_harness::Error>(())
+```
+
+### Get Configuration Paths
+
+```rust,no_run
+use get_harness::{Harness, HarnessKind, Scope};
+
+let harness = Harness::locate(HarnessKind::ClaudeCode)?;
+let config_dir = harness.config(&Scope::Global)?;
+println!("Config at: {}", config_dir.display());
+# Ok::<(), get_harness::Error>(())
+```
+
+### MCP Server Configuration
+
+```rust
+use get_harness::{Harness, HarnessKind};
+use get_harness::mcp::{McpServer, StdioMcpServer};
+
+let server = McpServer::Stdio(StdioMcpServer {
+    command: "npx".to_string(),
+    args: vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()],
+    env: Default::default(),
+    cwd: None,
+    enabled: true,
+    timeout_ms: None,
+});
+
+// Check compatibility
+let harness = Harness::new(HarnessKind::OpenCode);
+if harness.supports_mcp_server(&server) {
+    println!("Server is supported");
+}
+```
+
+## Supported Harnesses
+
+| Harness | Skills | Commands | MCP | Rules |
+|---------|--------|----------|-----|-------|
+| Claude Code | Yes | Yes | Yes | Yes |
+| OpenCode | Yes | Yes | Yes | Yes |
+| Goose | No | No | Yes | Yes |
+
+## Resource Types
+
+### DirectoryResource
+
+For directory-based resources (skills, commands):
+
+- `path` - Directory location
+- `exists` - Whether directory exists
+- `structure` - Flat or Nested layout
+- `file_format` - Expected file format
+
+### ConfigResource
+
+For file-based configuration (MCP):
+
+- `file` - Config file path
+- `key_path` - JSON pointer to relevant section
+- `format` - JSON, YAML, etc.
+
+## License
+
+MIT OR Apache-2.0
