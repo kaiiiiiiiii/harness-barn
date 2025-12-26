@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use crate::error::{Error, Result};
+use crate::mcp::{McpCapabilities, McpServer};
 use crate::types::{
     ConfigResource, DirectoryResource, DirectoryStructure, FileFormat, HarnessKind, Scope,
 };
@@ -241,6 +242,106 @@ impl Harness {
             format,
             schema_url: None,
         }))
+    }
+
+    /// Returns the MCP capabilities for this harness.
+    ///
+    /// Describes what MCP features this harness supports, such as transport
+    /// types (stdio, SSE, HTTP) and configuration options (OAuth, headers, etc.).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use get_harness::{Harness, HarnessKind};
+    ///
+    /// let harness = Harness::new(HarnessKind::OpenCode);
+    /// let caps = harness.mcp_capabilities();
+    /// assert!(caps.oauth);  // OpenCode supports OAuth
+    /// ```
+    #[must_use]
+    pub fn mcp_capabilities(&self) -> McpCapabilities {
+        McpCapabilities::for_kind(self.kind)
+    }
+
+    /// Checks if this harness supports a specific MCP server configuration.
+    ///
+    /// This performs field-aware validation, checking not just the transport type
+    /// but also whether the harness supports the specific features used by the server:
+    ///
+    /// - Stdio servers: checks `cwd` and `timeout_ms` if present
+    /// - SSE servers: checks `headers` and `timeout_ms` if present
+    /// - HTTP servers: checks `headers`, `oauth`, and `timeout_ms` if present
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use get_harness::{Harness, HarnessKind};
+    /// use get_harness::mcp::{McpServer, HttpMcpServer, OAuthConfig};
+    ///
+    /// let server = McpServer::Http(HttpMcpServer {
+    ///     url: "https://api.example.com/mcp".to_string(),
+    ///     headers: HashMap::new(),
+    ///     oauth: Some(OAuthConfig {
+    ///         client_id: Some("app".to_string()),
+    ///         client_secret: None,
+    ///         scope: None,
+    ///     }),
+    ///     enabled: true,
+    ///     timeout_ms: None,
+    /// });
+    ///
+    /// let opencode = Harness::new(HarnessKind::OpenCode);
+    /// assert!(opencode.supports_mcp_server(&server));  // OpenCode supports HTTP + OAuth
+    ///
+    /// let claude = Harness::new(HarnessKind::ClaudeCode);
+    /// assert!(!claude.supports_mcp_server(&server));  // Claude doesn't support OAuth
+    /// ```
+    #[must_use]
+    pub fn supports_mcp_server(&self, server: &McpServer) -> bool {
+        let caps = self.mcp_capabilities();
+
+        match server {
+            McpServer::Stdio(s) => {
+                if !caps.stdio {
+                    return false;
+                }
+                if s.cwd.is_some() && !caps.cwd {
+                    return false;
+                }
+                if s.timeout_ms.is_some() && !caps.timeout {
+                    return false;
+                }
+                true
+            }
+            McpServer::Sse(s) => {
+                if !caps.sse {
+                    return false;
+                }
+                if !s.headers.is_empty() && !caps.headers {
+                    return false;
+                }
+                if s.timeout_ms.is_some() && !caps.timeout {
+                    return false;
+                }
+                true
+            }
+            McpServer::Http(s) => {
+                if !caps.http {
+                    return false;
+                }
+                if !s.headers.is_empty() && !caps.headers {
+                    return false;
+                }
+                if s.oauth.is_some() && !caps.oauth {
+                    return false;
+                }
+                if s.timeout_ms.is_some() && !caps.timeout {
+                    return false;
+                }
+                true
+            }
+        }
     }
 
     /// Returns the rules directory resource for the given scope.
