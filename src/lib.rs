@@ -5,11 +5,13 @@
 
 pub mod error;
 pub mod harness;
+pub mod mcp;
 pub mod platform;
 pub mod types;
 
 pub use error::{Error, Result};
 pub use harness::Harness;
+pub use mcp::{HttpMcpServer, McpServer, OAuthConfig, SseMcpServer, StdioMcpServer};
 pub use types::{
     ConfigResource, DirectoryResource, DirectoryStructure, EnvValue, FileFormat, HarnessKind,
     PathType, Scope,
