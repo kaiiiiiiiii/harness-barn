@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::EnvValue;
+use crate::types::{EnvValue, HarnessKind};
 
 /// Returns `true` for serde default.
 fn default_true() -> bool {
@@ -200,6 +200,107 @@ pub struct OAuthConfig {
     /// OAuth scope(s) to request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+}
+
+/// Describes what MCP features a harness supports.
+///
+/// Different harnesses support different subsets of MCP configuration options.
+/// Use [`McpCapabilities::for_kind`] to get capabilities for a specific harness.
+///
+/// # Extensibility
+///
+/// This struct is marked `#[non_exhaustive]` to allow adding new capability
+/// fields in future versions without breaking changes. Use [`for_kind`] or
+/// struct update syntax (`..Default::default()`) when constructing.
+///
+/// [`for_kind`]: McpCapabilities::for_kind
+///
+/// # Example
+///
+/// ```
+/// use get_harness::mcp::McpCapabilities;
+/// use get_harness::types::HarnessKind;
+///
+/// let caps = McpCapabilities::for_kind(HarnessKind::OpenCode);
+/// assert!(caps.stdio);
+/// assert!(caps.oauth);  // OpenCode supports OAuth
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[non_exhaustive]
+pub struct McpCapabilities {
+    /// Supports local stdio servers.
+    pub stdio: bool,
+
+    /// Supports SSE (Server-Sent Events) remote servers.
+    pub sse: bool,
+
+    /// Supports HTTP/Streamable HTTP remote servers.
+    pub http: bool,
+
+    /// Supports OAuth authentication for remote servers.
+    pub oauth: bool,
+
+    /// Supports per-server timeout configuration.
+    pub timeout: bool,
+
+    /// Supports enable/disable toggle per server.
+    pub toggle: bool,
+
+    /// Supports custom HTTP headers for remote servers.
+    pub headers: bool,
+
+    /// Supports working directory (cwd) for stdio servers.
+    pub cwd: bool,
+}
+
+impl McpCapabilities {
+    /// Returns the MCP capabilities for a specific harness kind.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use get_harness::mcp::McpCapabilities;
+    /// use get_harness::types::HarnessKind;
+    ///
+    /// let caps = McpCapabilities::for_kind(HarnessKind::ClaudeCode);
+    /// assert!(caps.stdio);
+    /// assert!(!caps.oauth);  // Claude Code doesn't support OAuth
+    /// ```
+    #[must_use]
+    pub fn for_kind(kind: HarnessKind) -> Self {
+        match kind {
+            HarnessKind::ClaudeCode => Self {
+                stdio: true,
+                sse: true,
+                http: true,
+                oauth: false,
+                timeout: false,
+                toggle: false,
+                headers: true,
+                cwd: false,
+            },
+            HarnessKind::OpenCode => Self {
+                stdio: true,
+                sse: false, // Uses 'remote' type instead
+                http: true,
+                oauth: true,
+                timeout: true,
+                toggle: true,
+                headers: true,
+                cwd: false,
+            },
+            HarnessKind::Goose => Self {
+                stdio: true,
+                sse: true,
+                http: true, // streamable_http
+                oauth: false,
+                timeout: true, // Note: Goose uses seconds, not ms
+                toggle: true,
+                headers: true, // Only for streamable_http
+                cwd: false,
+            },
+        }
+    }
 }
 
 #[cfg(test)]
