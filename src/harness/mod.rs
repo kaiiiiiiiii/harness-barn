@@ -641,4 +641,100 @@ mod tests {
             assert!(harness.is_installed());
         }
     }
+
+    #[test]
+    fn mcp_capabilities_returns_correct_for_each_harness() {
+        let claude = Harness::new(HarnessKind::ClaudeCode);
+        assert!(!claude.mcp_capabilities().oauth);
+
+        let opencode = Harness::new(HarnessKind::OpenCode);
+        assert!(opencode.mcp_capabilities().oauth);
+
+        let goose = Harness::new(HarnessKind::Goose);
+        assert!(!goose.mcp_capabilities().oauth);
+    }
+
+    #[test]
+    fn supports_mcp_server_stdio_basic() {
+        use crate::mcp::StdioMcpServer;
+
+        let server = McpServer::Stdio(StdioMcpServer {
+            command: "node".to_string(),
+            args: vec![],
+            env: std::collections::HashMap::new(),
+            cwd: None,
+            enabled: true,
+            timeout_ms: None,
+        });
+
+        // All harnesses support basic stdio
+        for &kind in HarnessKind::ALL {
+            let harness = Harness::new(kind);
+            assert!(
+                harness.supports_mcp_server(&server),
+                "{kind:?} should support basic stdio"
+            );
+        }
+    }
+
+    #[test]
+    fn supports_mcp_server_stdio_with_timeout_rejected_by_claude() {
+        use crate::mcp::StdioMcpServer;
+
+        let server = McpServer::Stdio(StdioMcpServer {
+            command: "node".to_string(),
+            args: vec![],
+            env: std::collections::HashMap::new(),
+            cwd: None,
+            enabled: true,
+            timeout_ms: Some(30000), // Claude doesn't support timeout
+        });
+
+        let claude = Harness::new(HarnessKind::ClaudeCode);
+        assert!(!claude.supports_mcp_server(&server));
+
+        let opencode = Harness::new(HarnessKind::OpenCode);
+        assert!(opencode.supports_mcp_server(&server));
+    }
+
+    #[test]
+    fn supports_mcp_server_http_with_oauth_rejected_by_claude() {
+        use crate::mcp::{HttpMcpServer, OAuthConfig};
+
+        let server = McpServer::Http(HttpMcpServer {
+            url: "https://example.com".to_string(),
+            headers: std::collections::HashMap::new(),
+            oauth: Some(OAuthConfig {
+                client_id: Some("app".to_string()),
+                client_secret: None,
+                scope: None,
+            }),
+            enabled: true,
+            timeout_ms: None,
+        });
+
+        let claude = Harness::new(HarnessKind::ClaudeCode);
+        assert!(!claude.supports_mcp_server(&server));
+
+        let opencode = Harness::new(HarnessKind::OpenCode);
+        assert!(opencode.supports_mcp_server(&server));
+    }
+
+    #[test]
+    fn supports_mcp_server_sse_rejected_by_opencode() {
+        use crate::mcp::SseMcpServer;
+
+        let server = McpServer::Sse(SseMcpServer {
+            url: "https://example.com/sse".to_string(),
+            headers: std::collections::HashMap::new(),
+            enabled: true,
+            timeout_ms: None,
+        });
+
+        let opencode = Harness::new(HarnessKind::OpenCode);
+        assert!(!opencode.supports_mcp_server(&server)); // OpenCode doesn't support SSE
+
+        let claude = Harness::new(HarnessKind::ClaudeCode);
+        assert!(claude.supports_mcp_server(&server));
+    }
 }

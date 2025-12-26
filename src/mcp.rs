@@ -486,4 +486,64 @@ mod tests {
         assert!(sse_json.contains(r#""transport":"sse""#));
         assert!(http_json.contains(r#""transport":"http""#));
     }
+
+    #[test]
+    fn mcp_capabilities_for_claude_code() {
+        let caps = McpCapabilities::for_kind(HarnessKind::ClaudeCode);
+        assert!(caps.stdio);
+        assert!(caps.sse);
+        assert!(caps.http);
+        assert!(!caps.oauth);
+        assert!(!caps.timeout);
+        assert!(!caps.toggle);
+        assert!(caps.headers);
+        assert!(!caps.cwd);
+    }
+
+    #[test]
+    fn mcp_capabilities_for_opencode() {
+        let caps = McpCapabilities::for_kind(HarnessKind::OpenCode);
+        assert!(caps.stdio);
+        assert!(!caps.sse);
+        assert!(caps.http);
+        assert!(caps.oauth);
+        assert!(caps.timeout);
+        assert!(caps.toggle);
+        assert!(caps.headers);
+        assert!(!caps.cwd);
+    }
+
+    #[test]
+    fn mcp_capabilities_for_goose() {
+        let caps = McpCapabilities::for_kind(HarnessKind::Goose);
+        assert!(caps.stdio);
+        assert!(caps.sse);
+        assert!(caps.http);
+        assert!(!caps.oauth);
+        assert!(caps.timeout);
+        assert!(caps.toggle);
+        assert!(caps.headers);
+        assert!(!caps.cwd);
+    }
+
+    #[test]
+    fn mcp_capabilities_serialization() {
+        let caps = McpCapabilities::for_kind(HarnessKind::OpenCode);
+        let json = serde_json::to_string(&caps).unwrap();
+        assert!(json.contains(r#""oauth":true"#));
+        assert!(json.contains(r#""stdio":true"#));
+    }
+
+    #[test]
+    fn mcp_capabilities_default_is_all_false() {
+        let caps = McpCapabilities::default();
+        assert!(!caps.stdio);
+        assert!(!caps.sse);
+        assert!(!caps.http);
+        assert!(!caps.oauth);
+        assert!(!caps.timeout);
+        assert!(!caps.toggle);
+        assert!(!caps.headers);
+        assert!(!caps.cwd);
+    }
 }
