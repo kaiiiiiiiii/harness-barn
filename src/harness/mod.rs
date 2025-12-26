@@ -86,6 +86,21 @@ impl Harness {
             HarnessKind::Goose => goose::mcp_dir(&scope).ok(),
         }
     }
+
+    /// Returns the path to the rules directory for the given scope.
+    ///
+    /// Rules files contain behavioral instructions for the AI assistant.
+    /// Note: For project scope, this typically returns the project root
+    /// (not a subdirectory), as rules files like `CLAUDE.md` or `.goosehints`
+    /// conventionally live at the project root.
+    #[must_use]
+    pub fn rules_path(&self, scope: Scope) -> Option<PathBuf> {
+        match self.kind {
+            HarnessKind::ClaudeCode => claude_code::rules_dir(&scope),
+            HarnessKind::OpenCode => opencode::rules_dir(&scope),
+            HarnessKind::Goose => goose::rules_dir(&scope),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -246,5 +261,51 @@ mod tests {
 
         let harness = Harness::locate(HarnessKind::Goose).unwrap();
         assert!(harness.skills_path(Scope::Global).is_none());
+    }
+
+    #[test]
+    fn rules_path_none_for_claude_code_global() {
+        if !claude_code::is_installed() {
+            return;
+        }
+
+        let harness = Harness::locate(HarnessKind::ClaudeCode).unwrap();
+        assert!(harness.rules_path(Scope::Global).is_none());
+    }
+
+    #[test]
+    fn rules_path_project_root_for_claude_code() {
+        if !claude_code::is_installed() {
+            return;
+        }
+
+        let harness = Harness::locate(HarnessKind::ClaudeCode).unwrap();
+        let path = harness.rules_path(Scope::Project(PathBuf::from("/some/project")));
+        assert!(path.is_some());
+        assert_eq!(path.unwrap(), PathBuf::from("/some/project"));
+    }
+
+    #[test]
+    fn rules_path_global_for_goose() {
+        if !goose::is_installed() {
+            return;
+        }
+
+        let harness = Harness::locate(HarnessKind::Goose).unwrap();
+        let path = harness.rules_path(Scope::Global);
+        assert!(path.is_some());
+        assert!(path.unwrap().ends_with("goose"));
+    }
+
+    #[test]
+    fn rules_path_project_root_for_goose() {
+        if !goose::is_installed() {
+            return;
+        }
+
+        let harness = Harness::locate(HarnessKind::Goose).unwrap();
+        let path = harness.rules_path(Scope::Project(PathBuf::from("/some/project")));
+        assert!(path.is_some());
+        assert_eq!(path.unwrap(), PathBuf::from("/some/project"));
     }
 }

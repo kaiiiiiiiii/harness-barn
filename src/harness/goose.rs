@@ -65,6 +65,19 @@ pub fn skills_dir(_scope: &Scope) -> Option<PathBuf> {
     None
 }
 
+/// Returns the rules directory for the given scope.
+///
+/// Goose stores rules files (`.goosehints`, `AGENTS.md`) at:
+/// - **Global**: `~/.config/goose/`
+/// - **Project**: Project root directory
+#[must_use]
+pub fn rules_dir(scope: &Scope) -> Option<PathBuf> {
+    match scope {
+        Scope::Global => global_config_dir().ok(),
+        Scope::Project(root) => Some(root.clone()),
+    }
+}
+
 /// Checks if Goose is installed on this system.
 ///
 /// Currently checks if the global config directory exists.
@@ -125,5 +138,24 @@ mod tests {
         assert!(result.is_ok());
         let path = result.unwrap();
         assert!(path.ends_with("goose"));
+    }
+
+    #[test]
+    fn rules_dir_global_returns_config() {
+        if platform::config_dir().is_err() {
+            return;
+        }
+
+        let result = rules_dir(&Scope::Global);
+        assert!(result.is_some());
+        assert!(result.unwrap().ends_with("goose"));
+    }
+
+    #[test]
+    fn rules_dir_project_returns_root() {
+        let root = PathBuf::from("/some/project");
+        let result = rules_dir(&Scope::Project(root.clone()));
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), root);
     }
 }

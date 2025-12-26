@@ -74,6 +74,19 @@ pub fn skills_dir(scope: &Scope) -> Option<PathBuf> {
     }
 }
 
+/// Returns the rules directory for the given scope.
+///
+/// OpenCode stores rules files (`AGENTS.md`) at:
+/// - **Global**: None (no global rules)
+/// - **Project**: Project root directory
+#[must_use]
+pub fn rules_dir(scope: &Scope) -> Option<PathBuf> {
+    match scope {
+        Scope::Global => None,
+        Scope::Project(root) => Some(root.clone()),
+    }
+}
+
 /// Checks if OpenCode is installed on this system.
 ///
 /// Currently checks if the global config directory exists.
@@ -158,5 +171,18 @@ mod tests {
         assert!(result.is_ok());
         let path = result.unwrap();
         assert!(path.ends_with("plugin"));
+    }
+
+    #[test]
+    fn rules_dir_global_returns_none() {
+        assert!(rules_dir(&Scope::Global).is_none());
+    }
+
+    #[test]
+    fn rules_dir_project_returns_root() {
+        let root = PathBuf::from("/some/project");
+        let result = rules_dir(&Scope::Project(root.clone()));
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), root);
     }
 }
