@@ -195,7 +195,19 @@ impl Harness {
                     file_format: FileFormat::Markdown,
                 }))
             }
-            HarnessKind::Goose => Ok(None),
+            HarnessKind::Goose => {
+                let path = goose::skills_dir(scope)
+                    .ok_or_else(|| Error::NotFound("skills directory".into()))?;
+                Ok(Some(DirectoryResource {
+                    exists: path.exists(),
+                    path,
+                    structure: DirectoryStructure::Nested {
+                        subdir_pattern: "*".into(),
+                        file_name: "SKILL.md".into(),
+                    },
+                    file_format: FileFormat::Markdown,
+                }))
+            }
         }
     }
 
@@ -436,7 +448,7 @@ impl Harness {
     /// assert!(opencode.supports_mcp_server(&server));  // OpenCode supports HTTP + OAuth
     ///
     /// let claude = Harness::new(HarnessKind::ClaudeCode);
-    /// assert!(!claude.supports_mcp_server(&server));  // Claude doesn't support OAuth
+    /// assert!(claude.supports_mcp_server(&server));   // Claude supports HTTP + OAuth
     /// ```
     #[must_use]
     pub fn supports_mcp_server(&self, server: &McpServer) -> bool {
@@ -780,12 +792,30 @@ impl Harness {
 
                 Ok(config)
             }
-            McpServer::Sse(_) => {
-                // SSE is not supported by OpenCode (verified in supports_mcp_server)
-                Err(Error::UnsupportedMcpConfig {
-                    harness: HarnessKind::OpenCode.to_string(),
-                    reason: "SSE transport not supported by OpenCode".into(),
-                })
+            McpServer::Sse(sse) => {
+                let headers: serde_json::Map<String, serde_json::Value> = sse
+                    .headers
+                    .iter()
+                    .map(|(k, v)| {
+                        let value = v.to_native(HarnessKind::OpenCode);
+                        (k.clone(), json!(value))
+                    })
+                    .collect();
+
+                let mut config = json!({
+                    "type": "remote",
+                    "url": sse.url,
+                    "enabled": sse.enabled,
+                });
+
+                if !headers.is_empty() {
+                    config["headers"] = json!(headers);
+                }
+                if let Some(timeout) = sse.timeout_ms {
+                    config["timeout"] = json!(timeout);
+                }
+
+                Ok(config)
             }
         }
     }
@@ -945,11 +975,31 @@ mod tests {
     }
 
     #[test]
-    fn skills_none_for_goose() {
+    fn skills_for_goose_global() {
+        if crate::platform::config_dir().is_err() {
+            return;
+        }
+
         let harness = Harness::new(HarnessKind::Goose);
         let result = harness.skills(&Scope::Global);
         assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
+        let resource = result.unwrap();
+        assert!(resource.is_some());
+        let dir = resource.unwrap();
+        assert!(dir.path.ends_with("agents/skills"));
+        assert!(matches!(dir.structure, DirectoryStructure::Nested { .. }));
+    }
+
+    #[test]
+    fn skills_for_goose_project() {
+        let harness = Harness::new(HarnessKind::Goose);
+        let result = harness.skills(&Scope::Project(PathBuf::from("/some/project")));
+        assert!(result.is_ok());
+        let resource = result.unwrap();
+        assert!(resource.is_some());
+        let dir = resource.unwrap();
+        assert_eq!(dir.path, PathBuf::from("/some/project/.agents/skills"));
+        assert!(matches!(dir.structure, DirectoryStructure::Nested { .. }));
     }
 
     #[test]
@@ -1077,13 +1127,13 @@ mod tests {
     #[test]
     fn mcp_capabilities_returns_correct_for_each_harness() {
         let claude = Harness::new(HarnessKind::ClaudeCode);
-        assert!(!claude.mcp_capabilities().oauth);
+        assert!(claude.mcp_capabilities().oauth);
 
         let opencode = Harness::new(HarnessKind::OpenCode);
         assert!(opencode.mcp_capabilities().oauth);
 
         let goose = Harness::new(HarnessKind::Goose);
-        assert!(!goose.mcp_capabilities().oauth);
+        assert!(goose.mcp_capabilities().oauth);
     }
 
     #[test]
@@ -1110,7 +1160,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_mcp_server_stdio_with_timeout_rejected_by_claude() {
+    fn supports_mcp_server_stdio_with_timeout() {
         use crate::mcp::StdioMcpServer;
 
         let server = McpServer::Stdio(StdioMcpServer {
@@ -1119,18 +1169,18 @@ mod tests {
             env: std::collections::HashMap::new(),
             cwd: None,
             enabled: true,
-            timeout_ms: Some(30000), // Claude doesn't support timeout
+            timeout_ms: Some(30000),
         });
 
         let claude = Harness::new(HarnessKind::ClaudeCode);
-        assert!(!claude.supports_mcp_server(&server));
+        assert!(claude.supports_mcp_server(&server));
 
         let opencode = Harness::new(HarnessKind::OpenCode);
         assert!(opencode.supports_mcp_server(&server));
     }
 
     #[test]
-    fn supports_mcp_server_http_with_oauth_rejected_by_claude() {
+    fn supports_mcp_server_http_with_oauth() {
         use crate::mcp::{HttpMcpServer, OAuthConfig};
 
         let server = McpServer::Http(HttpMcpServer {
@@ -1146,14 +1196,14 @@ mod tests {
         });
 
         let claude = Harness::new(HarnessKind::ClaudeCode);
-        assert!(!claude.supports_mcp_server(&server));
+        assert!(claude.supports_mcp_server(&server));
 
         let opencode = Harness::new(HarnessKind::OpenCode);
         assert!(opencode.supports_mcp_server(&server));
     }
 
     #[test]
-    fn supports_mcp_server_sse_rejected_by_opencode() {
+    fn supports_mcp_server_sse() {
         use crate::mcp::SseMcpServer;
 
         let server = McpServer::Sse(SseMcpServer {
@@ -1164,7 +1214,7 @@ mod tests {
         });
 
         let opencode = Harness::new(HarnessKind::OpenCode);
-        assert!(!opencode.supports_mcp_server(&server)); // OpenCode doesn't support SSE
+        assert!(opencode.supports_mcp_server(&server));
 
         let claude = Harness::new(HarnessKind::ClaudeCode);
         assert!(claude.supports_mcp_server(&server));
@@ -1250,7 +1300,7 @@ mod tests {
     }
 
     #[test]
-    fn mcp_to_native_goose_rejects_oauth() {
+    fn mcp_to_native_goose_http_with_oauth() {
         use crate::mcp::{HttpMcpServer, OAuthConfig};
 
         let harness = Harness::new(HarnessKind::Goose);
@@ -1267,7 +1317,7 @@ mod tests {
         });
 
         let result = harness.mcp_to_native("test", &server);
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1393,7 +1443,7 @@ mod tests {
     }
 
     #[test]
-    fn mcp_to_native_opencode_rejects_sse() {
+    fn mcp_to_native_opencode_sse() {
         use crate::mcp::SseMcpServer;
 
         let harness = Harness::new(HarnessKind::OpenCode);
@@ -1405,14 +1455,12 @@ mod tests {
         });
 
         let result = harness.mcp_to_native("test", &server);
-        assert!(result.is_err());
+        assert!(result.is_ok());
 
-        if let Err(Error::UnsupportedMcpConfig { harness, reason }) = result {
-            assert_eq!(harness, "OpenCode");
-            assert!(reason.contains("unsupported features"));
-        } else {
-            panic!("Expected UnsupportedMcpConfig error");
-        }
+        let obj = result.unwrap();
+        let obj = obj.as_object().unwrap();
+        assert_eq!(obj.get("type").unwrap(), "remote");
+        assert_eq!(obj.get("url").unwrap(), "https://example.com/sse");
     }
 
     #[test]

@@ -264,7 +264,7 @@ impl McpCapabilities {
     ///
     /// let caps = McpCapabilities::for_kind(HarnessKind::ClaudeCode);
     /// assert!(caps.stdio);
-    /// assert!(!caps.oauth);  // Claude Code doesn't support OAuth
+    /// assert!(caps.oauth);   // Claude Code supports OAuth via /mcp command
     /// ```
     #[must_use]
     pub fn for_kind(kind: HarnessKind) -> Self {
@@ -273,15 +273,15 @@ impl McpCapabilities {
                 stdio: true,
                 sse: true,
                 http: true,
-                oauth: false,
-                timeout: false,
+                oauth: true,
+                timeout: true,
                 toggle: false,
                 headers: true,
                 cwd: false,
             },
             HarnessKind::OpenCode => Self {
                 stdio: true,
-                sse: false, // Uses 'remote' type instead
+                sse: true,
                 http: true,
                 oauth: true,
                 timeout: true,
@@ -292,11 +292,11 @@ impl McpCapabilities {
             HarnessKind::Goose => Self {
                 stdio: true,
                 sse: true,
-                http: true, // streamable_http
-                oauth: false,
-                timeout: true, // Note: Goose uses seconds, not ms
+                http: true,
+                oauth: true,
+                timeout: true,
                 toggle: true,
-                headers: true, // Only for streamable_http
+                headers: true,
                 cwd: false,
             },
         }
@@ -493,8 +493,8 @@ mod tests {
         assert!(caps.stdio);
         assert!(caps.sse);
         assert!(caps.http);
-        assert!(!caps.oauth);
-        assert!(!caps.timeout);
+        assert!(caps.oauth);
+        assert!(caps.timeout);
         assert!(!caps.toggle);
         assert!(caps.headers);
         assert!(!caps.cwd);
@@ -504,7 +504,7 @@ mod tests {
     fn mcp_capabilities_for_opencode() {
         let caps = McpCapabilities::for_kind(HarnessKind::OpenCode);
         assert!(caps.stdio);
-        assert!(!caps.sse);
+        assert!(caps.sse);
         assert!(caps.http);
         assert!(caps.oauth);
         assert!(caps.timeout);
@@ -519,7 +519,7 @@ mod tests {
         assert!(caps.stdio);
         assert!(caps.sse);
         assert!(caps.http);
-        assert!(!caps.oauth);
+        assert!(caps.oauth);
         assert!(caps.timeout);
         assert!(caps.toggle);
         assert!(caps.headers);
