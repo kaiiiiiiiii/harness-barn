@@ -51,6 +51,29 @@ impl HarnessKind {
     /// }
     /// ```
     pub const ALL: &'static [Self] = &[Self::ClaudeCode, Self::OpenCode, Self::Goose];
+
+    /// Returns the known CLI binary names for this harness.
+    ///
+    /// These are the executable names that indicate the harness is installed
+    /// and available in PATH.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use get_harness::HarnessKind;
+    ///
+    /// assert_eq!(HarnessKind::ClaudeCode.binary_names(), &["claude"]);
+    /// assert_eq!(HarnessKind::OpenCode.binary_names(), &["opencode"]);
+    /// assert_eq!(HarnessKind::Goose.binary_names(), &["goose"]);
+    /// ```
+    #[must_use]
+    pub fn binary_names(&self) -> &'static [&'static str] {
+        match self {
+            Self::ClaudeCode => &["claude"],
+            Self::OpenCode => &["opencode"],
+            Self::Goose => &["goose"],
+        }
+    }
 }
 
 /// Scope for path resolution.
@@ -520,5 +543,27 @@ mod tests {
     fn serde_deserialize_env_ref_from_object() {
         let parsed: EnvValue = serde_json::from_str(r#"{"env":"API_KEY"}"#).unwrap();
         assert_eq!(parsed, EnvValue::env("API_KEY"));
+    }
+
+    #[test]
+    fn binary_names_claude_code() {
+        assert_eq!(HarnessKind::ClaudeCode.binary_names(), &["claude"]);
+    }
+
+    #[test]
+    fn binary_names_opencode() {
+        assert_eq!(HarnessKind::OpenCode.binary_names(), &["opencode"]);
+    }
+
+    #[test]
+    fn binary_names_goose() {
+        assert_eq!(HarnessKind::Goose.binary_names(), &["goose"]);
+    }
+
+    #[test]
+    fn binary_names_returns_static_slice() {
+        for kind in HarnessKind::ALL {
+            assert_eq!(kind.binary_names().len(), 1);
+        }
     }
 }

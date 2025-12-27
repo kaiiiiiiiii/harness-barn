@@ -34,6 +34,10 @@ pub enum Error {
         /// Explanation of what's unsupported.
         reason: String,
     },
+
+    /// Binary detection failed due to system error.
+    #[error("binary detection error: {0}")]
+    BinaryDetection(String),
 }
 
 /// A specialized Result type for harness operations.

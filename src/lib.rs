@@ -2,17 +2,20 @@
 //!
 //! ## Modules
 //!
+//! - [`detection`] - Binary detection utilities
+//! - [`error`] - Error types
 //! - [`harness`] - Harness discovery and path resolution
 //! - [`mcp`] - MCP server type definitions
 //! - [`types`] - Core type definitions
-//! - [`error`] - Error types
 
+pub mod detection;
 pub mod error;
 pub mod harness;
 pub mod mcp;
 pub mod platform;
 pub mod types;
 
+pub use detection::find_binary;
 pub use error::{Error, Result};
 pub use harness::Harness;
 pub use mcp::{
