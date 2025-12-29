@@ -979,7 +979,7 @@ impl Harness {
         value: &serde_json::Value,
     ) -> Result<McpServer> {
         let result = match self.kind {
-            HarnessKind::ClaudeCode => claude_code::parse_mcp_server(value),
+            HarnessKind::ClaudeCode => claude_code::parse_mcp_server(name, value),
             HarnessKind::OpenCode => opencode::parse_mcp_server(value),
             HarnessKind::Goose => goose::parse_mcp_server(value),
             HarnessKind::AmpCode => amp_code::parse_mcp_server(name, value),

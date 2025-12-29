@@ -117,7 +117,7 @@ pub fn is_installed() -> bool {
 /// # Errors
 /// Returns an error if the JSON is malformed or missing required fields.
 #[allow(dead_code)] // Internal utility for future MCP config reading
-pub(crate) fn parse_mcp_server(value: &serde_json::Value) -> Result<McpServer> {
+pub(crate) fn parse_mcp_server(name: &str, value: &serde_json::Value) -> Result<McpServer> {
     let obj = value
         .as_object()
         .ok_or_else(|| Error::UnsupportedMcpConfig {
@@ -215,8 +215,26 @@ pub(crate) fn parse_mcp_server(value: &serde_json::Value) -> Result<McpServer> {
                 reason: format!("Unknown server type: {}", server_type),
             }),
         }
-    } else {
+    } else if obj.contains_key("url") && obj.contains_key("command") {
+        Err(Error::UnsupportedMcpConfig {
+            harness: "Claude Code".to_string(),
+            reason: format!(
+                "Server '{}' has both 'command' and 'url' fields - specify 'type' to disambiguate",
+                name
+            ),
+        })
+    } else if obj.contains_key("url") {
+        parse_http_server(obj)
+    } else if obj.contains_key("command") {
         parse_stdio_server(obj)
+    } else {
+        Err(Error::UnsupportedMcpConfig {
+            harness: "Claude Code".to_string(),
+            reason: format!(
+                "Server '{}' has neither 'command' (stdio) nor 'url' (http) field",
+                name
+            ),
+        })
     }
 }
 
@@ -283,6 +301,45 @@ fn parse_stdio_server(obj: &serde_json::Map<String, serde_json::Value>) -> Resul
     }))
 }
 
+fn parse_http_server(obj: &serde_json::Map<String, serde_json::Value>) -> Result<McpServer> {
+    let url = obj
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::UnsupportedMcpConfig {
+            harness: "Claude Code".to_string(),
+            reason: "HTTP server missing 'url' field".to_string(),
+        })?
+        .to_string();
+
+    let mut headers = HashMap::new();
+    if let Some(headers_value) = obj.get("headers") {
+        let headers_obj = headers_value
+            .as_object()
+            .ok_or_else(|| Error::UnsupportedMcpConfig {
+                harness: "Claude Code".to_string(),
+                reason: "'headers' must be an object".to_string(),
+            })?;
+        for (key, value) in headers_obj {
+            let value_str = value.as_str().ok_or_else(|| Error::UnsupportedMcpConfig {
+                harness: "Claude Code".to_string(),
+                reason: format!("Header '{}' must be a string", key),
+            })?;
+            headers.insert(
+                key.clone(),
+                EnvValue::from_native(value_str, HarnessKind::ClaudeCode),
+            );
+        }
+    }
+
+    Ok(McpServer::Http(HttpMcpServer {
+        url,
+        headers,
+        oauth: None,
+        enabled: true,
+        timeout_ms: None,
+    }))
+}
+
 /// Parses all MCP servers from a Claude Code config JSON.
 ///
 /// # Arguments
@@ -302,7 +359,7 @@ pub(crate) fn parse_mcp_servers(config: &serde_json::Value) -> Result<Vec<(Strin
 
     let mut result = Vec::new();
     for (name, value) in servers_obj {
-        let server = parse_mcp_server(value)?;
+        let server = parse_mcp_server(name, value)?;
         result.push((name.clone(), server));
     }
 
@@ -404,7 +461,7 @@ mod tests {
             "args": ["-y", "@modelcontextprotocol/server-filesystem"]
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Stdio(server) = result.unwrap() {
@@ -431,7 +488,7 @@ mod tests {
             }
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Stdio(server) = result.unwrap() {
@@ -453,7 +510,7 @@ mod tests {
             "command": "my-server"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Stdio(server) = result.unwrap() {
@@ -471,7 +528,7 @@ mod tests {
             "url": "https://example.com/sse"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Sse(server) = result.unwrap() {
@@ -495,7 +552,7 @@ mod tests {
             }
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Sse(server) = result.unwrap() {
@@ -521,7 +578,7 @@ mod tests {
             "url": "https://api.example.com/mcp"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Http(server) = result.unwrap() {
@@ -545,7 +602,7 @@ mod tests {
             }
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Http(server) = result.unwrap() {
@@ -566,7 +623,7 @@ mod tests {
             "args": ["server.js"]
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -576,7 +633,7 @@ mod tests {
             "type": "sse"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -586,7 +643,7 @@ mod tests {
             "type": "http"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -597,7 +654,7 @@ mod tests {
             "url": "https://example.com"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -605,7 +662,7 @@ mod tests {
     fn parse_mcp_server_not_object_fails() {
         let json = json!("not an object");
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -700,7 +757,7 @@ mod tests {
             }
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Stdio(server) = result.unwrap() {
@@ -725,7 +782,7 @@ mod tests {
             }
         });
 
-        let parsed = parse_mcp_server(&original).unwrap();
+        let parsed = parse_mcp_server("test", &original).unwrap();
 
         if let McpServer::Stdio(ref server) = parsed {
             assert_eq!(server.command, "npx");
@@ -746,7 +803,7 @@ mod tests {
             }
         });
 
-        let parsed = parse_mcp_server(&original).unwrap();
+        let parsed = parse_mcp_server("test", &original).unwrap();
 
         if let McpServer::Sse(ref server) = parsed {
             assert_eq!(server.url, "https://example.com/sse");
@@ -764,7 +821,7 @@ mod tests {
             "args": ["-y", "server"]
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_ok());
 
         if let McpServer::Stdio(server) = result.unwrap() {
@@ -782,7 +839,7 @@ mod tests {
             "args": ["-y", 123, "server"]
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -793,7 +850,7 @@ mod tests {
             "args": "not-an-array"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -804,7 +861,7 @@ mod tests {
             "env": "not-an-object"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -816,7 +873,7 @@ mod tests {
             "headers": "not-an-object"
         });
 
-        let result = parse_mcp_server(&json);
+        let result = parse_mcp_server("test", &json);
         assert!(result.is_err());
     }
 
@@ -830,7 +887,7 @@ mod tests {
             }
         });
 
-        let parsed = parse_mcp_server(&original).unwrap();
+        let parsed = parse_mcp_server("test", &original).unwrap();
 
         if let McpServer::Http(ref server) = parsed {
             assert_eq!(server.url, "https://api.example.com/mcp");
@@ -838,5 +895,48 @@ mod tests {
         } else {
             panic!("Expected Http variant");
         }
+    }
+
+    #[test]
+    fn infer_stdio_from_command_field() {
+        let json = json!({
+            "command": "node",
+            "args": ["server.js"]
+        });
+        let result = parse_mcp_server("test", &json).unwrap();
+        assert!(matches!(result, McpServer::Stdio(_)));
+    }
+
+    #[test]
+    fn infer_http_from_url_field() {
+        let json = json!({
+            "url": "https://example.com/mcp",
+            "headers": { "Authorization": "Bearer token" }
+        });
+        let result = parse_mcp_server("test", &json).unwrap();
+        assert!(matches!(result, McpServer::Http(_)));
+    }
+
+    #[test]
+    fn ambiguous_config_with_both_command_and_url_fails() {
+        let json = json!({
+            "command": "node",
+            "url": "https://example.com/mcp"
+        });
+        let result = parse_mcp_server("test", &json);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("both"));
+    }
+
+    #[test]
+    fn neither_command_nor_url_fails() {
+        let json = json!({
+            "env": { "FOO": "bar" }
+        });
+        let result = parse_mcp_server("test", &json);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("neither"));
     }
 }
