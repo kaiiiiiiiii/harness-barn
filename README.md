@@ -87,6 +87,24 @@ For directory-based resources (skills, commands):
 - `structure` - Flat or Nested layout
 - `file_format` - Expected file format
 
+#### Directory Structure Patterns
+
+**Skills** use **nested** structure (one subdirectory per skill):
+```
+~/.config/opencode/skill/
+  my-skill/
+    SKILL.md
+```
+
+**Commands** use **flat** structure (files directly in directory):
+```
+~/.config/opencode/command/
+  my-command.md
+  another-command.md
+```
+
+This pattern applies across all harnesses that support the resource type.
+
 ### ConfigResource
 
 For file-based configuration (MCP):
