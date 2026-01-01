@@ -2,18 +2,18 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("HTTP request failed: {0}")]
-    Http(#[from] ureq::Error),
+    #[error("HTTP error: {0}")]
+    Http(String),
 
-    #[error("JSON parsing failed: {0}")]
+    #[error("JSON parse error: {0}")]
     Json(#[from] serde_json::Error),
 
-    #[error("ZIP extraction failed: {0}")]
-    Zip(#[from] zip::result::ZipError),
+    #[error("ZIP error: {0}")]
+    Zip(String),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("{0}")]
-    Other(String),
+    #[error("Invalid source: {0}")]
+    InvalidSource(String),
 }
