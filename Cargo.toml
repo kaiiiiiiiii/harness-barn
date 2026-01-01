@@ -16,6 +16,8 @@ thiserror = "2"
 home = "0.5"
 which = "7"
 url = "2"
+ureq = "3"
+zip = "2"
 
 # Internal crates
 harness-locate = { path = "crates/harness-locate" }

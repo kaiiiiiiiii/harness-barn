@@ -1,0 +1,15 @@
+[package]
+name = "farrier"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Skill discovery and fetching for AI coding agents"
+
+[dependencies]
+harness-locate.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+zip.workspace = true
