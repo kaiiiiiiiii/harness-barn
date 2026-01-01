@@ -40,7 +40,6 @@ pub fn config_dir(scope: &Scope) -> Result<PathBuf> {
             harness: "AMP Code".to_string(),
             scope: "project".to_string(),
         }),
-        Scope::Custom(path) => Ok(path.clone()),
     }
 }
 
@@ -52,7 +51,6 @@ pub fn commands_dir(scope: &Scope) -> Result<PathBuf> {
     match scope {
         Scope::Global => Ok(global_config_dir()?.join("commands")),
         Scope::Project(root) => Ok(root.join(".agents").join("commands")),
-        Scope::Custom(path) => Ok(path.join("commands")),
     }
 }
 
@@ -82,7 +80,6 @@ pub fn skills_dir(scope: &Scope) -> Option<PathBuf> {
             .ok()
             .map(|p| p.join("agents").join("skills")),
         Scope::Project(root) => Some(root.join(".agents").join("skills")),
-        Scope::Custom(path) => Some(path.join("skills")),
     }
 }
 
@@ -96,7 +93,6 @@ pub fn rules_dir(scope: &Scope) -> Option<PathBuf> {
     match scope {
         Scope::Global => global_config_dir().ok(),
         Scope::Project(root) => Some(root.clone()),
-        Scope::Custom(path) => Some(path.clone()),
     }
 }
 

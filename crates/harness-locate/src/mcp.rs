@@ -303,7 +303,7 @@ impl McpCapabilities {
                 stdio: true,
                 sse: true,
                 http: true,
-                oauth: true,
+                oauth: false,
                 timeout: true,
                 toggle: false,
                 headers: true,

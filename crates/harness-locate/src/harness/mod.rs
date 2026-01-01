@@ -366,47 +366,9 @@ impl Harness {
                     exists: path.exists(),
                     path,
                     structure: DirectoryStructure::Flat {
-                        file_pattern: "*.md".into(),
+                        file_pattern: "*.{yaml,json}".into(),
                     },
                     file_format: FileFormat::Yaml,
-                }))
-            }
-            HarnessKind::ClaudeCode | HarnessKind::Goose | HarnessKind::AmpCode => Ok(None),
-        }
-    }
-
-    /// Returns the configuration file location for config-based agents.
-    ///
-    /// OpenCode supports defining agents in `opencode.jsonc` under the `agent` key,
-    /// in addition to directory-based agents returned by [`agents()`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the configuration directory cannot be determined.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use harness_locate::{Harness, HarnessKind, Scope};
-    ///
-    /// let harness = Harness::new(HarnessKind::OpenCode);
-    /// if let Some(config) = harness.agents_config(&Scope::Global)? {
-    ///     println!("Agent config: {}", config.file.display());
-    ///     println!("Key path: {}", config.key_path);
-    /// }
-    /// # Ok::<(), harness_locate::Error>(())
-    /// ```
-    pub fn agents_config(&self, scope: &Scope) -> Result<Option<ConfigResource>> {
-        match self.kind {
-            HarnessKind::OpenCode => {
-                let base = opencode::config_dir(scope)?;
-                let file = base.join("opencode.jsonc");
-                Ok(Some(ConfigResource {
-                    file_exists: file.exists(),
-                    file,
-                    key_path: "/agent".into(),
-                    format: FileFormat::Jsonc,
-                    schema_url: None,
                 }))
             }
             HarnessKind::ClaudeCode | HarnessKind::Goose | HarnessKind::AmpCode => Ok(None),
@@ -471,13 +433,12 @@ impl Harness {
                 let file = match scope {
                     Scope::Global => claude_code::config_dir(&Scope::Global)?.join(".mcp.json"),
                     Scope::Project(root) => root.join(".mcp.json"),
-                    Scope::Custom(path) => path.join(".mcp.json"),
                 };
                 (file, "/mcpServers".into(), FileFormat::Json)
             }
             HarnessKind::OpenCode => {
                 let base = opencode::config_dir(scope)?;
-                (base.join("opencode.jsonc"), "/mcp".into(), FileFormat::Json)
+                (base.join("opencode.json"), "/mcp".into(), FileFormat::Json)
             }
             HarnessKind::Goose => {
                 let base = goose::config_dir(scope)?;
@@ -488,9 +449,9 @@ impl Harness {
                 )
             }
             HarnessKind::AmpCode => {
-                let base = amp_code::mcp_dir(scope)?;
+                let base = amp_code::config_dir(scope)?;
                 (
-                    base.join("settings.json"),
+                    base.join("amp.json"),
                     "/amp.mcpServers".into(),
                     FileFormat::Json,
                 )
@@ -696,11 +657,10 @@ impl Harness {
         }
 
         match self.kind {
-            HarnessKind::ClaudeCode | HarnessKind::AmpCode => {
-                self.mcp_to_native_claude_code(name, server)
-            }
+            HarnessKind::ClaudeCode => self.mcp_to_native_claude_code(name, server),
             HarnessKind::OpenCode => self.mcp_to_native_opencode(name, server),
             HarnessKind::Goose => self.mcp_to_native_goose(name, server),
+            HarnessKind::AmpCode => self.mcp_to_native_claude_code(name, server),
         }
     }
 
@@ -985,7 +945,7 @@ impl Harness {
             HarnessKind::ClaudeCode => claude_code::parse_mcp_servers(config)?,
             HarnessKind::OpenCode => opencode::parse_mcp_servers(config)?,
             HarnessKind::Goose => goose::parse_mcp_servers(config)?,
-            HarnessKind::AmpCode => amp_code::parse_mcp_servers(config)?,
+            HarnessKind::AmpCode => claude_code::parse_mcp_servers(config)?,
         };
         Ok(servers.into_iter().collect())
     }
@@ -1018,10 +978,10 @@ impl Harness {
         value: &serde_json::Value,
     ) -> Result<McpServer> {
         let result = match self.kind {
-            HarnessKind::ClaudeCode => claude_code::parse_mcp_server(name, value),
+            HarnessKind::ClaudeCode => claude_code::parse_mcp_server(value),
             HarnessKind::OpenCode => opencode::parse_mcp_server(value),
             HarnessKind::Goose => goose::parse_mcp_server(value),
-            HarnessKind::AmpCode => amp_code::parse_mcp_server(name, value),
+            HarnessKind::AmpCode => claude_code::parse_mcp_server(value),
         };
 
         result.map_err(|e| match e {
@@ -1199,7 +1159,7 @@ mod tests {
         let resource = result.unwrap();
         assert!(resource.is_some());
         let dir = resource.unwrap();
-        assert!(dir.path.ends_with("goose/skills"));
+        assert!(dir.path.ends_with("agents/skills"));
         assert!(matches!(dir.structure, DirectoryStructure::Nested { .. }));
     }
 
@@ -1211,7 +1171,7 @@ mod tests {
         let resource = result.unwrap();
         assert!(resource.is_some());
         let dir = resource.unwrap();
-        assert_eq!(dir.path, PathBuf::from("/some/project/.goose/skills"));
+        assert_eq!(dir.path, PathBuf::from("/some/project/.agents/skills"));
         assert!(matches!(dir.structure, DirectoryStructure::Nested { .. }));
     }
 

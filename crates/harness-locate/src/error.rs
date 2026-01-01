@@ -35,18 +35,13 @@ pub enum Error {
         reason: String,
     },
 
-    /// The requested scope is not supported by this harness.
-    #[error("{harness} does not support {scope} scope")]
-    UnsupportedScope {
-        /// The harness that doesn't support the scope.
-        harness: String,
-        /// The scope that isn't supported (e.g., "project").
-        scope: String,
-    },
-
     /// Binary detection failed due to system error.
     #[error("binary detection error: {0}")]
     BinaryDetection(String),
+
+    /// The requested scope is not supported by this harness.
+    #[error("{harness} does not support {scope} scope")]
+    UnsupportedScope { harness: String, scope: String },
 
     /// YAML parsing failed.
     #[error("YAML parse error: {0}")]
