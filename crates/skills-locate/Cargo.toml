@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Skill discovery and fetching for AI coding agents"
+readme = "README.md"
+keywords = ["ai", "skills", "plugins", "mcp", "agents"]
+categories = ["development-tools", "config"]
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }

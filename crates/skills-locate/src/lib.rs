@@ -9,8 +9,8 @@ mod marketplace;
 mod types;
 
 pub use component::{
-    AgentDescriptor, CommandDescriptor, parse_agent_descriptor, parse_command_descriptor,
-    parse_skill_descriptor,
+    AgentDescriptor, CommandDescriptor, HooksConfig, McpDescriptor, parse_agent_descriptor,
+    parse_command_descriptor, parse_mcp_json, parse_skill_descriptor,
 };
 pub use discovery::{discover_from_source, discover_plugins};
 pub use error::{Error, Result};
