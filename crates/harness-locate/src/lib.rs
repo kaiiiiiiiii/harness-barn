@@ -30,4 +30,8 @@ pub use types::{
     ConfigResource, DirectoryResource, DirectoryStructure, EnvValue, FileFormat, HarnessKind,
     InstallationStatus, PathType, ResourceKind, Scope,
 };
-pub use validation::{Severity, ValidationIssue, validate_mcp_server};
+pub use validation::{
+    AgentCapabilities, CODE_AGENT_COLOR_FORMAT, CODE_AGENT_MODE_UNSUPPORTED,
+    CODE_AGENT_PARSE_ERROR, CODE_AGENT_TOOLS_FORMAT, CODE_AGENT_UNSUPPORTED, ColorFormat, Severity,
+    ToolsFormat, ValidationIssue, validate_agent_for_harness, validate_mcp_server,
+};

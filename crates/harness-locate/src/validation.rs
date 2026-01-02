@@ -62,6 +62,23 @@ pub const CODE_TOGGLE_UNSUPPORTED: &str = "harness.toggle.unsupported";
 /// SSE transport deprecated for this harness (prefer HTTP).
 pub const CODE_SSE_DEPRECATED: &str = "harness.transport.sse_deprecated";
 
+// Agent validation codes.
+
+/// Agent tools field has wrong type for harness.
+pub const CODE_AGENT_TOOLS_FORMAT: &str = "agent.tools.format";
+
+/// Agent color field has invalid format for harness.
+pub const CODE_AGENT_COLOR_FORMAT: &str = "agent.color.format";
+
+/// Agent mode value not supported by harness.
+pub const CODE_AGENT_MODE_UNSUPPORTED: &str = "agent.mode.unsupported";
+
+/// Harness does not support agents.
+pub const CODE_AGENT_UNSUPPORTED: &str = "agent.unsupported";
+
+/// Agent frontmatter failed to parse.
+pub const CODE_AGENT_PARSE_ERROR: &str = "agent.parse_error";
+
 /// Severity level for validation issues.
 ///
 /// Determines how the issue should be treated by callers.
@@ -76,6 +93,55 @@ pub enum Severity {
     ///
     /// Examples: very long timeout, suspicious environment variable name.
     Warning,
+}
+
+/// Expected format for agent `tools` field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolsFormat {
+    /// `Record<string, boolean>` - OpenCode style: `{ bash: true, edit: false }`
+    BooleanRecord,
+    /// Comma-separated string - Claude Code style: `"Glob, Grep, Read"`
+    CommaSeparatedString,
+}
+
+/// Expected format for agent `color` field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorFormat {
+    /// Only hex colors: `#RRGGBB`
+    HexOnly,
+    /// Named colors (red, blue) or hex - accepts any string.
+    NamedOrHex,
+}
+
+/// Describes agent validation requirements for a harness.
+#[derive(Debug, Clone)]
+pub struct AgentCapabilities {
+    /// Expected format for `tools` field.
+    pub tools_format: ToolsFormat,
+    /// Expected format for `color` field.
+    pub color_format: ColorFormat,
+    /// Supported mode values.
+    pub supported_modes: &'static [&'static str],
+}
+
+impl AgentCapabilities {
+    /// Returns agent capabilities for a harness, or `None` if agents unsupported.
+    #[must_use]
+    pub fn for_kind(kind: HarnessKind) -> Option<Self> {
+        match kind {
+            HarnessKind::OpenCode => Some(Self {
+                tools_format: ToolsFormat::BooleanRecord,
+                color_format: ColorFormat::HexOnly,
+                supported_modes: &["subagent", "primary", "all"],
+            }),
+            HarnessKind::ClaudeCode | HarnessKind::AmpCode => Some(Self {
+                tools_format: ToolsFormat::CommaSeparatedString,
+                color_format: ColorFormat::NamedOrHex,
+                supported_modes: &["subagent", "primary"],
+            }),
+            HarnessKind::Goose => None,
+        }
+    }
 }
 
 /// A validation issue found in an MCP server configuration.
@@ -266,6 +332,151 @@ pub fn validate_for_harness(server: &McpServer, kind: HarnessKind) -> Vec<Valida
     }
 
     issues
+}
+
+/// Validates agent frontmatter content for a specific harness.
+///
+/// Returns an empty vector if valid, or a list of issues found.
+/// Returns a single `CODE_AGENT_UNSUPPORTED` error if harness doesn't support agents.
+#[must_use]
+pub fn validate_agent_for_harness(content: &str, kind: HarnessKind) -> Vec<ValidationIssue> {
+    let mut issues = Vec::new();
+
+    let caps = match AgentCapabilities::for_kind(kind) {
+        Some(c) => c,
+        None => {
+            issues.push(ValidationIssue::error(
+                "agent",
+                format!("{} does not support agents", kind.as_str()),
+                Some(CODE_AGENT_UNSUPPORTED),
+            ));
+            return issues;
+        }
+    };
+
+    let frontmatter = match crate::skill::parse_frontmatter(content) {
+        Ok(fm) => fm,
+        Err(e) => {
+            issues.push(ValidationIssue::error(
+                "frontmatter",
+                format!("failed to parse frontmatter: {e}"),
+                Some(CODE_AGENT_PARSE_ERROR),
+            ));
+            return issues;
+        }
+    };
+
+    let yaml = match &frontmatter.yaml {
+        Some(y) => y,
+        None => return issues,
+    };
+
+    if let Some(tools) = yaml.get("tools") {
+        issues.extend(validate_tools_format(tools, caps.tools_format, kind));
+    }
+
+    if let Some(color) = yaml.get("color").and_then(|v| v.as_str()) {
+        issues.extend(validate_color_format(color, caps.color_format, kind));
+    }
+
+    if let Some(mode) = yaml.get("mode").and_then(|v| v.as_str())
+        && !caps.supported_modes.contains(&mode)
+    {
+        issues.push(ValidationIssue::error(
+            "mode",
+            format!(
+                "mode '{}' not supported by {}; valid: {:?}",
+                mode,
+                kind.as_str(),
+                caps.supported_modes
+            ),
+            Some(CODE_AGENT_MODE_UNSUPPORTED),
+        ));
+    }
+
+    issues
+}
+
+fn validate_tools_format(
+    tools: &serde_yaml::Value,
+    expected: ToolsFormat,
+    kind: HarnessKind,
+) -> Vec<ValidationIssue> {
+    let mut issues = Vec::new();
+
+    match expected {
+        ToolsFormat::BooleanRecord => {
+            if !tools.is_mapping() {
+                issues.push(ValidationIssue::error(
+                    "tools",
+                    format!(
+                        "{} requires tools as object (e.g., {{ bash: true }}), got {}",
+                        kind.as_str(),
+                        yaml_type_name(tools)
+                    ),
+                    Some(CODE_AGENT_TOOLS_FORMAT),
+                ));
+            }
+        }
+        ToolsFormat::CommaSeparatedString => {
+            if !tools.is_string() {
+                issues.push(ValidationIssue::error(
+                    "tools",
+                    format!(
+                        "{} requires tools as comma-separated string, got {}",
+                        kind.as_str(),
+                        yaml_type_name(tools)
+                    ),
+                    Some(CODE_AGENT_TOOLS_FORMAT),
+                ));
+            }
+        }
+    }
+
+    issues
+}
+
+fn validate_color_format(
+    color: &str,
+    expected: ColorFormat,
+    kind: HarnessKind,
+) -> Vec<ValidationIssue> {
+    let mut issues = Vec::new();
+
+    match expected {
+        ColorFormat::HexOnly => {
+            if !is_hex_color(color) {
+                issues.push(ValidationIssue::error(
+                    "color",
+                    format!(
+                        "{} requires hex color (#RRGGBB), got '{}'",
+                        kind.as_str(),
+                        color
+                    ),
+                    Some(CODE_AGENT_COLOR_FORMAT),
+                ));
+            }
+        }
+        ColorFormat::NamedOrHex => {}
+    }
+
+    issues
+}
+
+fn yaml_type_name(value: &serde_yaml::Value) -> &'static str {
+    match value {
+        serde_yaml::Value::Null => "null",
+        serde_yaml::Value::Bool(_) => "boolean",
+        serde_yaml::Value::Number(_) => "number",
+        serde_yaml::Value::String(_) => "string",
+        serde_yaml::Value::Sequence(_) => "array",
+        serde_yaml::Value::Mapping(_) => "object",
+        serde_yaml::Value::Tagged(_) => "tagged",
+    }
+}
+
+fn is_hex_color(s: &str) -> bool {
+    s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn validate_stdio(server: &StdioMcpServer) -> Vec<ValidationIssue> {
@@ -676,5 +887,135 @@ mod tests {
         let issues = validate_for_harness(&server, HarnessKind::ClaudeCode);
         assert!(issues.iter().any(|i| i.code == Some(CODE_EMPTY_COMMAND)));
         assert!(issues.iter().any(|i| i.code == Some(CODE_CWD_UNSUPPORTED)));
+    }
+
+    // Agent validation tests
+
+    #[test]
+    fn opencode_rejects_comma_string_tools() {
+        let content = "---\ntools: Glob, Grep, Read\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::OpenCode);
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_TOOLS_FORMAT))
+        );
+    }
+
+    #[test]
+    fn opencode_accepts_boolean_record_tools() {
+        let content = "---\ntools:\n  bash: true\n  edit: false\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::OpenCode);
+        assert!(
+            !issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_TOOLS_FORMAT))
+        );
+    }
+
+    #[test]
+    fn opencode_rejects_named_color() {
+        let content = "---\ncolor: red\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::OpenCode);
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_COLOR_FORMAT))
+        );
+    }
+
+    #[test]
+    fn opencode_accepts_hex_color() {
+        let content = "---\ncolor: \"#FF5733\"\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::OpenCode);
+        assert!(
+            !issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_COLOR_FORMAT))
+        );
+    }
+
+    #[test]
+    fn claude_code_accepts_comma_string_tools() {
+        let content = "---\ntools: Glob, Grep, Read\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::ClaudeCode);
+        assert!(
+            !issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_TOOLS_FORMAT))
+        );
+    }
+
+    #[test]
+    fn claude_code_accepts_named_color() {
+        let content = "---\ncolor: red\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::ClaudeCode);
+        assert!(
+            !issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_COLOR_FORMAT))
+        );
+    }
+
+    #[test]
+    fn goose_returns_unsupported_error() {
+        let content = "---\nname: test\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::Goose);
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_UNSUPPORTED))
+        );
+    }
+
+    #[test]
+    fn invalid_yaml_returns_parse_error() {
+        let content = "---\ntools: [unclosed bracket\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::OpenCode);
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_PARSE_ERROR))
+        );
+    }
+
+    #[test]
+    fn missing_frontmatter_is_valid() {
+        let content = "Just the agent prompt, no frontmatter";
+        let issues = validate_agent_for_harness(content, HarnessKind::OpenCode);
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn invalid_mode_returns_error() {
+        let content = "---\nmode: invalid_mode\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::OpenCode);
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_MODE_UNSUPPORTED))
+        );
+    }
+
+    #[test]
+    fn valid_mode_accepted() {
+        let content = "---\nmode: subagent\n---\nAgent prompt";
+        let issues = validate_agent_for_harness(content, HarnessKind::OpenCode);
+        assert!(
+            !issues
+                .iter()
+                .any(|i| i.code == Some(CODE_AGENT_MODE_UNSUPPORTED))
+        );
+    }
+
+    #[test]
+    fn is_hex_color_validates_correctly() {
+        assert!(is_hex_color("#FF5733"));
+        assert!(is_hex_color("#000000"));
+        assert!(is_hex_color("#ffffff"));
+        assert!(!is_hex_color("red"));
+        assert!(!is_hex_color("#FFF"));
+        assert!(!is_hex_color("FF5733"));
+        assert!(!is_hex_color("#GGGGGG"));
     }
 }
